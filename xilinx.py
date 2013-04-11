@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os
+import os, platform
 from waflib import Task
 from waflib.TaskGen import extension
 
@@ -126,13 +126,16 @@ def bit_file(self, node):
     pass
 
 def xilinx_find_tool(conf, name):
-    XILINX_ISE_BIN = "%s/bin/lin64" % conf.options.dir
+    if platform.machine() == "x86_64":
+        xilinx_dir = "%s/bin/lin64" % conf.options.dir
+    else:
+        xilinx_dir = "%s/bin/lin" % conf.options.dir
 
     key = "XILINX_%s" % name.upper()
     tool = conf.find_program(
         name,
         var = key,
-        path_list = XILINX_ISE_BIN,
+        path_list = xilinx_dir,
     )
     conf.env[key] = tool
 
