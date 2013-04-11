@@ -126,8 +126,7 @@ def bit_file(self, node):
     pass
 
 def xilinx_find_tool(conf, name):
-    XILINX_ISE = "/opt/Xilinx/14.5/ISE_DS/ISE"
-    XILINX_ISE_BIN = "%s/bin/lin64" % XILINX_ISE
+    XILINX_ISE_BIN = "%s/bin/lin64" % conf.options.dir
 
     key = "XILINX_%s" % name.upper()
     tool = conf.find_program(
@@ -142,4 +141,10 @@ def configure(conf):
         xilinx_find_tool(conf, tool)
 
 def options(opt):
-    pass
+    opt.add_option(
+        "--xilinx-dir",
+        action="store",
+        dest="dir",
+        default="/opt/Xilinx/14.5/ISE_DS/ISE",
+        help="xilinx ise directory"
+    )
