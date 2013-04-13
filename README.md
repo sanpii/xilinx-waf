@@ -46,15 +46,15 @@ And run:
 
     $ ./waf
     Waf: Entering directory `/home/sanpi/projects/fpga/waf/build'
-    [1/7] verilog: src/main.v -> build/blink.prj
-    [2/7] prj: build/blink.prj -> build/blink.xst
-    [3/7] ngc: build/blink.xst -> build/blink.ngc
+    [1/7] create_project: src/main.v -> build/blink.prj
+    [2/7] create_xst: build/blink.prj -> build/blink.xst
+    [3/7] run_xst: build/blink.xst -> build/blink.ngc
     …
-    [4/7] ngd: build/blink.ngc -> build/blink.ngd
+    [4/7] ngdbuild: build/blink.ngc -> build/blink.ngd
     …
-    [5/7] ncd: build/blink.ngd -> build/blink.ncd
+    [5/7] map: build/blink.ngd -> build/blink.ncd
     …
-    [6/7] routed_ncd: build/blink.ncd -> build/blink-routed.ncd
+    [6/7] places_and_routes: build/blink.ncd -> build/blink-routed.ncd
     …
     [7/7] bitgen: build/blink-routed.ncd -> build/blink.bit
     …

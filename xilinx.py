@@ -6,14 +6,14 @@ import os, platform
 from waflib import Task
 from waflib.TaskGen import extension
 
-class verilog(Task.Task):
+class create_project(Task.Task):
     color = "BLUE"
 
     def run(self):
         for source in self.inputs:
             self.outputs[0].write("verilog work %s\n" % source.abspath())
 
-class prj(Task.Task):
+class create_xst(Task.Task):
     color = "BLUE"
 
     def run(self):
@@ -32,11 +32,11 @@ class prj(Task.Task):
 -opt_level 1
 """ % locals())
 
-class ngc(Task.Task):
+class run_xst(Task.Task):
     color = "BLUE"
-    run_str = "${XILINX_XST} -ifn ${SRC[0].abspath()} -ofn ${TGT[0].abspath()}"
+    run_str = "${XILINX_XST} -ifn ${SRC[0].abspath()}"
 
-class ngd(Task.Task):
+class ngdbuild(Task.Task):
     color = "BLUE"
 
     def run(self):
@@ -49,7 +49,7 @@ class ngd(Task.Task):
         cmd = "%(tool)s -uc %(ucf)s -p %(device)s %(src)s %(tgt)s" % locals()
         self.exec_command(cmd)
 
-class ncd(Task.Task):
+class map(Task.Task):
     color = "BLUE"
 
     def run(self):
@@ -61,7 +61,7 @@ class ncd(Task.Task):
         cmd = "%(tool)s -p %(device)s -detail -pr off -o %(tgt)s %(src)s" % locals()
         self.exec_command(cmd)
 
-class routed_ncd(Task.Task):
+class places_and_routes(Task.Task):
     color = "BLUE"
     run_str = "${XILINX_PAR} -w ${SRC[0].abspath()} ${TGT[0].abspath()}"
 
@@ -72,32 +72,32 @@ class bitgen(Task.Task):
 @extension(".v")
 def verilog_file(self, node):
     try:
-        verilog_task = self.verilog_task
+        task = self.create_project_task
     except AttributeError:
-        verilog_task = self.verilog_task = self.create_task('verilog')
+        task = self.create_project_task = self.create_task("create_project")
 
-    verilog_task.inputs.append(node)
+    task.inputs.append(node)
     prj_node = self.bld.bldnode.find_or_declare("%s.prj" % self.target)
-    verilog_task.outputs.append(prj_node)
+    task.outputs.append(prj_node)
     self.source.append(prj_node)
 
 @extension(".prj")
 def project_file(self, node):
     xst_node = self.bld.bldnode.find_or_declare("%s.xst" % self.target)
-    task = self.create_task("prj", node, xst_node)
+    task = self.create_task("create_xst", node, xst_node)
     task.device = self.device
     self.source.append(xst_node)
 
 @extension(".xst")
 def xst_file(self, node):
     ngc_node = self.bld.bldnode.find_or_declare("%s.ngc" % self.target)
-    self.create_task("ngc", node, ngc_node)
+    self.create_task("run_xst", node, ngc_node)
     self.source.append(ngc_node)
 
 @extension(".ngc")
 def ngc_file(self, node):
     ngd_node = self.bld.bldnode.find_or_declare("%s.ngd" % self.target)
-    task = self.create_task("ngd", node, ngd_node)
+    task = self.create_task("ngdbuild", node, ngd_node)
     task.ucf = self.path.find_or_declare(self.ucf)
     task.device = self.device
     self.source.append(ngd_node)
@@ -105,14 +105,14 @@ def ngc_file(self, node):
 @extension(".ngd")
 def ngd_file(self, node):
     ncd_node = self.bld.bldnode.find_or_declare("%s.ncd" % self.target)
-    task = self.create_task("ncd", node, ncd_node)
+    task = self.create_task("map", node, ncd_node)
     task.device = self.device
     self.source.append(ncd_node)
 
 @extension(".ncd")
 def ncd_file(self, node):
     routed_ncd_node = self.bld.bldnode.find_or_declare("%s-routed.ncd" % self.target)
-    self.create_task("routed_ncd", node, routed_ncd_node)
+    self.create_task("places_and_routes", node, routed_ncd_node)
     self.source.append(routed_ncd_node)
 
 @extension("-routed.ncd")
