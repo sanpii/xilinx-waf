@@ -19,7 +19,7 @@ class prj(Task.Task):
     def run(self):
         source = self.inputs[0].abspath()
         target = os.path.splitext(self.outputs[0].__str__())[0]
-        device = self.env.DEVICE
+        device = self.device
 
         self.outputs[0].write("""run
 -ifn %(source)s
@@ -38,11 +38,28 @@ class ngc(Task.Task):
 
 class ngd(Task.Task):
     color = "BLUE"
-    run_str = "${XILINX_NGDBUILD} -uc ${UCF} -p ${DEVICE} ${SRC[0].abspath()} ${TGT[0].abspath()}"
+
+    def run(self):
+        tool = self.env.XILINX_NGDBUILD
+        ucf = self.ucf.abspath()
+        device = self.device
+        src = self.inputs[0].abspath()
+        tgt = self.outputs[0].abspath()
+
+        cmd = "%(tool)s -uc %(ucf)s -p %(device)s %(src)s %(tgt)s" % locals()
+        self.exec_command(cmd)
 
 class ncd(Task.Task):
     color = "BLUE"
-    run_str = "${XILINX_MAP} -p ${DEVICE} -detail -pr off -o ${TGT[0].abspath()} ${SRC[0].abspath()}"
+
+    def run(self):
+        tool = self.env.XILINX_MAP
+        device = self.device
+        src = self.inputs[0].abspath()
+        tgt = self.outputs[0].abspath()
+
+        cmd = "%(tool)s -p %(device)s -detail -pr off -o %(tgt)s %(src)s" % locals()
+        self.exec_command(cmd)
 
 class routed_ncd(Task.Task):
     color = "BLUE"
@@ -68,6 +85,7 @@ def verilog_file(self, node):
 def project_file(self, node):
     xst_node = self.bld.bldnode.find_or_declare("%s.xst" % self.target)
     task = self.create_task("prj", node, xst_node)
+    task.device = self.device
     self.source.append(xst_node)
 
 @extension(".xst")
@@ -80,12 +98,15 @@ def xst_file(self, node):
 def ngc_file(self, node):
     ngd_node = self.bld.bldnode.find_or_declare("%s.ngd" % self.target)
     task = self.create_task("ngd", node, ngd_node)
+    task.ucf = self.path.find_or_declare(self.ucf)
+    task.device = self.device
     self.source.append(ngd_node)
 
 @extension(".ngd")
 def ngd_file(self, node):
     ncd_node = self.bld.bldnode.find_or_declare("%s.ncd" % self.target)
     task = self.create_task("ncd", node, ncd_node)
+    task.device = self.device
     self.source.append(ncd_node)
 
 @extension(".ncd")
@@ -125,8 +146,8 @@ def configure(conf):
 def options(opt):
     opt.add_option(
         "--xilinx-dir",
-        action="store",
-        dest="dir",
-        default="/opt/Xilinx/14.5/ISE_DS/ISE",
-        help="xilinx ise directory"
+        action = "store",
+        dest = "dir",
+        default = "/opt/Xilinx/14.5/ISE_DS/ISE",
+        help = "xilinx ise directory"
     )
