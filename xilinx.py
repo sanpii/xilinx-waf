@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+# .v -> .prj -> .xst -> .ngc -> .ngd -> .ncd -> -routed.ncd -> .bit
+
 import os, platform
 from waflib import Task
 from waflib.TaskGen import extension
