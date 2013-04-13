@@ -14,8 +14,6 @@ Create ``wscript``:
 
     #!/usr/bin/env python
 
-    import os
-
     def option(opt):
         opt.load("xilinx", tooldir = "xilinx-waf")
 
