@@ -17,7 +17,7 @@ class prj(Task.Task):
     def run(self):
         source = self.inputs[0].abspath()
         target = os.path.splitext(self.outputs[0].__str__())[0]
-        device = self.device
+        device = self.env.DEVICE
 
         self.outputs[0].write("""run
 -ifn %(source)s
@@ -32,47 +32,23 @@ class prj(Task.Task):
 
 class ngc(Task.Task):
     color = "BLUE"
-    run_str = "${XILINX_XST} -ifn ${SRC} -ofn ${TGT} > ngc.log"
+    run_str = "${XILINX_XST} -ifn ${SRC[0].abspath()} -ofn ${TGT[0].abspath()}"
 
 class ngd(Task.Task):
     color = "BLUE"
-
-    def run(self):
-        bld = self.generator.bld
-        cmd = "%s -uc %s -p %s %s %s > ngd.log" % (
-            self.env.XILINX_NGDBUILD,
-            os.path.join(bld.srcnode.bldpath(), self.ucf),
-            self.device,
-            self.inputs[0].abspath(),
-            self.outputs[0].abspath(),
-        )
-        return self.exec_command(cmd)
+    run_str = "${XILINX_NGDBUILD} -uc ${UCF} -p ${DEVICE} ${SRC[0].abspath()} ${TGT[0].abspath()}"
 
 class ncd(Task.Task):
     color = "BLUE"
+    run_str = "${XILINX_MAP} -p ${DEVICE} -detail -pr off -o ${TGT[0].abspath()} ${SRC[0].abspath()}"
 
-    def run(self):
-        bld = self.generator.bld
-
-        tmp = self.outputs[0].abspath().replace('.ncd', '_map.ncd')
-        cmd = "%s -p %s -detail -pr off -o %s %s > map.log" % (
-            self.env.XILINX_MAP,
-            self.device,
-            tmp,
-            self.inputs[0].abspath(),
-        )
-        self.exec_command(cmd)
-
-        cmd = "%s -w %s %s > par.log" % (
-            self.env.XILINX_PAR,
-            tmp,
-            self.outputs[0].abspath(),
-        )
-        return self.exec_command(cmd)
+class routed_ncd(Task.Task):
+    color = "BLUE"
+    run_str = "${XILINX_PAR} ${SRC[0].abspath()} ${TGT[0].abspath()}"
 
 class bitgen(Task.Task):
     color = "BLUE"
-    run_str = "${XILINX_BITGEN} -w -g StartUpClk:CClk -g CRC:Enable ${SRC} ${TGT} > bitgen.log"
+    run_str = "${XILINX_BITGEN} -w -g StartUpClk:CClk -g CRC:Enable ${SRC[0].abspath()} ${TGT[0].abspath()}"
 
 @extension(".v")
 def verilog_file(self, node):
@@ -82,42 +58,43 @@ def verilog_file(self, node):
         verilog_task = self.verilog_task = self.create_task('verilog')
 
     verilog_task.inputs.append(node)
-    prj_node = self.path.find_or_declare(("%s.prj" % self.target))
+    prj_node = self.bld.bldnode.find_or_declare("%s.prj" % self.target)
     verilog_task.outputs.append(prj_node)
     self.source.append(prj_node)
 
 @extension(".prj")
 def project_file(self, node):
-    xst_node = node.change_ext(".xst")
+    xst_node = self.bld.bldnode.find_or_declare("%s.xst" % self.target)
     task = self.create_task("prj", node, xst_node)
-    task.device = self.device
     self.source.append(xst_node)
 
 @extension(".xst")
 def xst_file(self, node):
-    ngc_node = node.change_ext(".ngc")
+    ngc_node = self.bld.bldnode.find_or_declare("%s.ngc" % self.target)
     self.create_task("ngc", node, ngc_node)
     self.source.append(ngc_node)
 
-
 @extension(".ngc")
 def ngc_file(self, node):
-    ngd_node = node.change_ext(".ngd")
+    ngd_node = self.bld.bldnode.find_or_declare("%s.ngd" % self.target)
     task = self.create_task("ngd", node, ngd_node)
-    task.ucf = self.ucf
-    task.device = self.device
     self.source.append(ngd_node)
 
 @extension(".ngd")
 def ngd_file(self, node):
-    ncd_node = node.change_ext(".ncd")
+    ncd_node = self.bld.bldnode.find_or_declare("%s.ncd" % self.target)
     task = self.create_task("ncd", node, ncd_node)
-    task.device = self.device
     self.source.append(ncd_node)
 
 @extension(".ncd")
 def ncd_file(self, node):
-    bit_node = node.change_ext(".bit")
+    routed_ncd_node = self.bld.bldnode.find_or_declare("%s-routed.ncd" % self.target)
+    self.create_task("routed_ncd", node, routed_ncd_node)
+    self.source.append(routed_ncd_node)
+
+@extension("-routed.ncd")
+def routed_ncd_file(self, node):
+    bit_node = self.bld.bldnode.find_or_declare("%s.bit" % self.target)
     self.create_task("bitgen", node, bit_node)
     self.source.append(bit_node)
 
