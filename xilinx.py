@@ -46,7 +46,7 @@ class ncd(Task.Task):
 
 class routed_ncd(Task.Task):
     color = "BLUE"
-    run_str = "${XILINX_PAR} ${SRC[0].abspath()} ${TGT[0].abspath()}"
+    run_str = "${XILINX_PAR} -w ${SRC[0].abspath()} ${TGT[0].abspath()}"
 
 class bitgen(Task.Task):
     color = "BLUE"
