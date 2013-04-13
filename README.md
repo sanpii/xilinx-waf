@@ -46,12 +46,18 @@ And run:
 
     $ ./waf
     Waf: Entering directory `/home/sanpi/projects/fpga/waf/build'
-    [1/6] verilog: src/main.v -> build/blink.prj
-    [2/6] prj: build/blink.prj -> build/blink.xst
-    [3/6] ngc: build/blink.xst -> build/blink.ngc
-    [4/6] ngd: build/blink.ngc -> build/blink.ngd
-    [5/6] ncd: build/blink.ngd -> build/blink.ncd
-    [6/6] bitgen: build/blink.ncd -> build/blink.bit
+    [1/7] verilog: src/main.v -> build/blink.prj
+    [2/7] prj: build/blink.prj -> build/blink.xst
+    [3/7] ngc: build/blink.xst -> build/blink.ngc
+    …
+    [4/7] ngd: build/blink.ngc -> build/blink.ngd
+    …
+    [5/7] ncd: build/blink.ngd -> build/blink.ncd
+    …
+    [6/7] routed_ncd: build/blink.ncd -> build/blink-routed.ncd
+    …
+    [7/7] bitgen: build/blink-routed.ncd -> build/blink.bit
+    …
     Waf: Leaving directory `/home/sanpi/projects/fpga/waf/build'
     'build' finished successfully (21.857s)
 
