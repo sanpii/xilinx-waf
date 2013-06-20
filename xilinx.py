@@ -10,8 +10,10 @@ class create_project(Task.Task):
     color = "BLUE"
 
     def run(self):
+        output = ""
         for source in self.inputs:
-            self.outputs[0].write("verilog work %s\n" % source.abspath())
+            output = output + "verilog work %s\n" % source.abspath()
+        self.outputs[0].write(output)
 
 class create_xst(Task.Task):
     color = "BLUE"
