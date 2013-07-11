@@ -1,131 +1,9 @@
 #!/usr/bin/env python
 
-# .v -> .prj -> .xst -> .ngc -> .ngd -> .ncd -> -routed.ncd -> .bit
-
 import os, platform
-from waflib import Task
-from waflib.TaskGen import extension
 
-class create_project(Task.Task):
-    color = "BLUE"
-
-    def run(self):
-        output = ""
-        for source in self.inputs:
-            output = output + "verilog work %s\n" % source.abspath()
-        self.outputs[0].write(output)
-
-class create_xst(Task.Task):
-    color = "BLUE"
-
-    def run(self):
-        source = self.inputs[0].abspath()
-        target = os.path.splitext(self.outputs[0].__str__())[0]
-        device = self.device
-
-        self.outputs[0].write("""run
--ifn %(source)s
--top %(target)s
--ifmt MIXED
--ofn %(target)s
--ofmt NGC
--p %(device)s
--opt_mode Speed
--opt_level 1
-""" % locals())
-
-class run_xst(Task.Task):
-    color = "BLUE"
-    run_str = "${XILINX_XST} -ifn ${SRC[0].abspath()}"
-
-class ngdbuild(Task.Task):
-    color = "BLUE"
-
-    def run(self):
-        tool = self.env.XILINX_NGDBUILD
-        ucf = self.ucf.abspath()
-        device = self.device
-        src = self.inputs[0].abspath()
-        tgt = self.outputs[0].abspath()
-
-        cmd = "%(tool)s -uc %(ucf)s -p %(device)s %(src)s %(tgt)s" % locals()
-        self.exec_command(cmd)
-
-class map(Task.Task):
-    color = "BLUE"
-
-    def run(self):
-        tool = self.env.XILINX_MAP
-        device = self.device
-        src = self.inputs[0].abspath()
-        tgt = self.outputs[0].abspath()
-
-        cmd = "%(tool)s -p %(device)s -detail -pr off -o %(tgt)s %(src)s" % locals()
-        self.exec_command(cmd)
-
-class places_and_routes(Task.Task):
-    color = "BLUE"
-    run_str = "${XILINX_PAR} -w ${SRC[0].abspath()} ${TGT[0].abspath()}"
-
-class bitgen(Task.Task):
-    color = "BLUE"
-    run_str = "${XILINX_BITGEN} -w -g StartUpClk:CClk -g CRC:Enable ${SRC[0].abspath()} ${TGT[0].abspath()}"
-
-@extension(".v")
-def verilog_file(self, node):
-    try:
-        task = self.create_project_task
-    except AttributeError:
-        task = self.create_project_task = self.create_task("create_project")
-
-    task.inputs.append(node)
-    prj_node = self.bld.bldnode.find_or_declare("%s.prj" % self.target)
-    task.outputs.append(prj_node)
-    self.source.append(prj_node)
-
-@extension(".prj")
-def project_file(self, node):
-    xst_node = self.bld.bldnode.find_or_declare("%s.xst" % self.target)
-    task = self.create_task("create_xst", node, xst_node)
-    task.device = self.device
-    self.source.append(xst_node)
-
-@extension(".xst")
-def xst_file(self, node):
-    ngc_node = self.bld.bldnode.find_or_declare("%s.ngc" % self.target)
-    self.create_task("run_xst", node, ngc_node)
-    self.source.append(ngc_node)
-
-@extension(".ngc")
-def ngc_file(self, node):
-    ngd_node = self.bld.bldnode.find_or_declare("%s.ngd" % self.target)
-    task = self.create_task("ngdbuild", node, ngd_node)
-    task.ucf = self.path.find_or_declare(self.ucf)
-    task.device = self.device
-    self.source.append(ngd_node)
-
-@extension(".ngd")
-def ngd_file(self, node):
-    ncd_node = self.bld.bldnode.find_or_declare("%s.ncd" % self.target)
-    task = self.create_task("map", node, ncd_node)
-    task.device = self.device
-    self.source.append(ncd_node)
-
-@extension(".ncd")
-def ncd_file(self, node):
-    routed_ncd_node = self.bld.bldnode.find_or_declare("%s-routed.ncd" % self.target)
-    self.create_task("places_and_routes", node, routed_ncd_node)
-    self.source.append(routed_ncd_node)
-
-@extension("-routed.ncd")
-def routed_ncd_file(self, node):
-    bit_node = self.bld.bldnode.find_or_declare("%s.bit" % self.target)
-    self.create_task("bitgen", node, bit_node)
-    self.source.append(bit_node)
-
-@extension(".bit")
-def bit_file(self, node):
-    pass
+from waflib.Build import BuildContext
+from waflib import Logs
 
 def xilinx_find_tool(conf, name):
     if platform.machine() == "x86_64":
@@ -142,7 +20,7 @@ def xilinx_find_tool(conf, name):
     conf.env[key] = tool
 
 def configure(conf):
-    for tool in ["xst", "ngdbuild", "map", "par", "bitgen"]:
+    for tool in ["xst", "ngdbuild", "map", "par", "bitgen", "fuse"]:
         xilinx_find_tool(conf, tool)
 
 def options(opt):
@@ -153,3 +31,155 @@ def options(opt):
         default = "/opt/Xilinx/14.5/ISE_DS/ISE",
         help = "xilinx ise directory"
     )
+
+class XilinxProject(object):
+    def __init__(self, ctx, tg):
+        self.path = ctx.bldnode
+        self.ctx = ctx
+        self.name = tg.name
+        self.device = tg.device
+        self.sources = tg.to_nodes(getattr(tg, 'source', []))
+        self.ucf = tg.path.find_resource(tg.ucf)
+        self.tg = tg
+
+    def build(self):
+        project = self.create_project(self.sources)
+        [ngc, xst] = self.create_xst(project)
+        ngc = self.create_ngc(xst, ngc)
+        ngd = self.create_ngd(ngc)
+        ncd = self.map(ngd)
+        routed_ncd = self.places_and_routes(ncd)
+        self.bitgen(routed_ncd)
+
+    def create_project(self, sources):
+        Logs.info('=> Create project file')
+
+        data = ''
+        for source in sources:
+            data = data + "verilog %s %s\n" % (self.name, source.abspath())
+
+        project = self.path.make_node(self.name + '.prj')
+        project.write(data)
+
+        return project
+
+    def create_xst(self, project):
+        Logs.info('=> Create xst file')
+
+        xst = project.change_ext(".xst")
+        ngc = xst.change_ext(".ngc")
+
+        source = project.abspath()
+        name = self.name
+        target = ngc.abspath()
+        device = self.device
+
+        xst.write("""run
+-ifn %(source)s
+-top %(name)s
+-ifmt MIXED
+-ofn %(target)s
+-ofmt NGC
+-p %(device)s
+-opt_mode Speed
+-opt_level 1
+""" % locals())
+
+        return [ngc, xst]
+
+    def create_ngc(self, xst, ngc):
+        Logs.info('=> Run xst file')
+
+        tool = self.tg.env.XILINX_XST
+        source = xst.abspath()
+
+        cmd = "%(tool)s -ifn %(source)s" % locals()
+        self.ctx.exec_command(cmd, cwd=self.path.abspath())
+
+        return ngc
+
+    def create_ngd(self, ngc):
+        Logs.info('=> Run ngdbuild')
+
+        ngd = ngc.change_ext(".ngd")
+
+        tool = self.tg.env.XILINX_NGDBUILD
+        ucf = self.ucf.abspath()
+        device = self.device
+        source = ngc.abspath()
+        target = ngd.abspath()
+
+        cmd = "%(tool)s -uc %(ucf)s -p %(device)s %(source)s %(target)s" % locals()
+        self.ctx.exec_command(cmd, cwd=self.path.abspath())
+
+        return ngd
+
+    def map(self, ngd):
+        Logs.info('=> Map')
+
+        ncd = ngd.change_ext(".ncd")
+
+        tool = self.tg.env.XILINX_MAP
+        device = self.device
+        source = ngd.abspath()
+        target = ncd.abspath()
+
+        cmd = "%(tool)s -p %(device)s -detail -pr off -o %(target)s %(source)s" % locals()
+        self.ctx.exec_command(cmd, cwd=self.path.abspath())
+
+        return ncd
+
+    def places_and_routes(self, ncd):
+        Logs.info('=> Places and routes')
+
+        routed_ncd = ncd.change_ext("-routed.ncd")
+
+        tool = self.tg.env.XILINX_PAR
+        source = ncd.abspath()
+        target = routed_ncd.abspath()
+
+        cmd = "%(tool)s -w %(source)s %(target)s" % locals()
+        self.ctx.exec_command(cmd, cwd=self.path.abspath())
+
+        return routed_ncd
+
+    def bitgen(self, routed_ncd):
+        Logs.info('=> Bitgen')
+
+        bit = routed_ncd.change_ext(".bit", "-routed.ncd")
+
+        tool = self.tg.env.XILINX_BITGEN
+        source = routed_ncd.abspath()
+        target = bit.abspath()
+
+        cmd = "%(tool)s -w -g StartUpClk:CClk -g CRC:Enable %(source)s %(target)s" % locals()
+        self.ctx.exec_command(cmd, cwd=self.path.abspath())
+
+        return bit
+
+class XilinxContext(BuildContext):
+
+    def init(self):
+        self.restore()
+        if not self.all_envs:
+            self.load_envs()
+        self.recurse([self.run_dir])
+
+    def collect_projects(self):
+        projects = []
+
+        for g in self.groups:
+            for tg in g:
+                projects.append(XilinxProject(self, tg))
+
+        return projects
+
+# .v -> .prj -> .xst -> .ngc -> .ngd -> .ncd -> -routed.ncd -> .bit
+class Synthetize(XilinxContext):
+    fun = 'synthetize'
+
+    def execute(self):
+        self.init()
+        projects = self.collect_projects()
+        for project in projects:
+            project.build()
