@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import os, platform
+import os, platform, shutil
 
 from waflib.Build import BuildContext
 from waflib import Logs
@@ -19,8 +19,10 @@ def xilinx_find_tool(conf, name):
     )
     conf.env[key] = tool
 
+    conf.env["XILINX_DIR"] = conf.options.dir
+
 def configure(conf):
-    for tool in ["xst", "ngdbuild", "map", "par", "bitgen", "fuse"]:
+    for tool in ["xst", "ngdbuild", "map", "par", "bitgen", "fuse", "vlogcomp"]:
         xilinx_find_tool(conf, tool)
 
 def options(opt):
@@ -37,10 +39,58 @@ class XilinxProject(object):
         self.path = ctx.bldnode
         self.ctx = ctx
         self.name = tg.name
-        self.device = tg.device
         self.sources = tg.to_nodes(getattr(tg, 'source', []))
-        self.ucf = tg.path.find_resource(tg.ucf)
         self.tg = tg
+
+        try:
+            self.device = tg.device
+        except AttributeError:
+            self.device = None
+
+        try:
+            self.ucf = tg.path.find_resource(tg.ucf)
+        except AttributeError:
+            self.ucf = None
+
+
+    def simulate(self):
+
+        shutil.copy(
+            "%s/verilog/src/glbl.v" % self.tg.env.XILINX_DIR,
+            "%s/glbl.v" % self.path.abspath()
+        )
+        source = self.path.make_node("glbl.v")
+        self.sources.append(source)
+
+        project = self.create_project(self.sources)
+        self.vlogcomp(project)
+        exe = self.create_exe(project)
+
+    def vlogcomp(self, project):
+        Logs.info("=> Running vlogcomp")
+
+        tool = self.tg.env.XILINX_VLOGCOMP
+
+        cmd = "%(tool)s -work isim_temp -intstyle ise -prj %(project)s" % locals()
+        self.ctx.exec_command(cmd, cwd=self.path.abspath())
+
+    def create_exe(self, project):
+        Logs.info("=> Create exe file")
+
+        exe = project.change_ext(".exe")
+
+        tool = self.tg.env.XILINX_FUSE
+        source = project.abspath()
+        target = exe.abspath()
+        name = self.name
+        module = "blinkTest"
+
+        cmd = "%(tool)s -incremental -lib unisims_ver -lib unimacro_ver -lib xilinxcorelib_ver -o %(target)s -prj %(source)s %(name)s.%(module)s %(name)s.glbl" % locals()
+        print cmd
+        self.ctx.exec_command(cmd, cwd=self.path.abspath())
+
+        return exe
+
 
     def build(self):
         project = self.create_project(self.sources)
@@ -52,7 +102,7 @@ class XilinxProject(object):
         self.bitgen(routed_ncd)
 
     def create_project(self, sources):
-        Logs.info('=> Create project file')
+        Logs.info("=> Create project file")
 
         data = ''
         for source in sources:
@@ -64,7 +114,7 @@ class XilinxProject(object):
         return project
 
     def create_xst(self, project):
-        Logs.info('=> Create xst file')
+        Logs.info("=> Create xst file")
 
         xst = project.change_ext(".xst")
         ngc = xst.change_ext(".ngc")
@@ -88,7 +138,7 @@ class XilinxProject(object):
         return [ngc, xst]
 
     def create_ngc(self, xst, ngc):
-        Logs.info('=> Run xst file')
+        Logs.info("=> Run xst file")
 
         tool = self.tg.env.XILINX_XST
         source = xst.abspath()
@@ -99,7 +149,7 @@ class XilinxProject(object):
         return ngc
 
     def create_ngd(self, ngc):
-        Logs.info('=> Run ngdbuild')
+        Logs.info("=> Run ngdbuild")
 
         ngd = ngc.change_ext(".ngd")
 
@@ -115,7 +165,7 @@ class XilinxProject(object):
         return ngd
 
     def map(self, ngd):
-        Logs.info('=> Map')
+        Logs.info("=> Map")
 
         ncd = ngd.change_ext(".ncd")
 
@@ -130,7 +180,7 @@ class XilinxProject(object):
         return ncd
 
     def places_and_routes(self, ncd):
-        Logs.info('=> Places and routes')
+        Logs.info("=> Places and routes")
 
         routed_ncd = ncd.change_ext("-routed.ncd")
 
@@ -144,7 +194,7 @@ class XilinxProject(object):
         return routed_ncd
 
     def bitgen(self, routed_ncd):
-        Logs.info('=> Bitgen')
+        Logs.info("=> Bitgen")
 
         bit = routed_ncd.change_ext(".bit", "-routed.ncd")
 
@@ -183,3 +233,14 @@ class Synthetize(XilinxContext):
         projects = self.collect_projects()
         for project in projects:
             project.build()
+
+# .v -> .prj -> .exe
+class Simulate(XilinxContext):
+    cmd = 'sim'
+    fun = 'simulate'
+
+    def execute(self):
+        self.init()
+        projects = self.collect_projects()
+        for project in projects:
+            project.simulate()

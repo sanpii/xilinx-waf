@@ -4,7 +4,7 @@ Use [waf](https://code.google.com/p/waf/) for compile xilinx verilog sources.
 
 ## Installation
 
-Copy xilinx.py in your source directory or use git submodule:
+Copy ``xilinx.py`` in your source directory or use git submodule:
 
     $ git submodule add git://github.com/sanpii/xilinx-waf.git
 
@@ -28,6 +28,12 @@ Create ``wscript``:
             device = "xc3s500e-4-vq100",
         )
 
+    def simulate(bld):
+        bld(
+            target = "blink",
+            source = ["src/main.v", "src/blinkTest.v"]
+        )
+
 Configure:
 
     $ ./waf configure
@@ -38,25 +44,23 @@ Configure:
     Checking for program map                 : /opt/Xilinx/14.5/ISE_DS/ISE/bin/lin64/map
     Checking for program par                 : /opt/Xilinx/14.5/ISE_DS/ISE/bin/lin64/par
     Checking for program bitgen              : /opt/Xilinx/14.5/ISE_DS/ISE/bin/lin64/bitgen
-    'configure' finished successfully (0.004s)
+    Checking for program fuse                : /opt/Xilinx/14.5/ISE_DS/ISE/bin/lin64/fuse
+    Checking for program vlogcomp            : /opt/Xilinx/14.5/ISE_DS/ISE/bin/lin64/vlogcomp
+    'configure' finished successfully (0.009s)
 
-And run:
+Simulate:
+
+    $ ./waf sim
+    …
+    'sim' finished successfully (1.868s)
+    $ source /opt/Xilinx/14.5/ISE_DS/settings64.sh
+    $ cd build
+    $ ./blink_bench.exe -gui
+
+Synthetize:
 
     $ ./waf
-    Waf: Entering directory `/home/sanpi/projects/fpga/waf/build'
-    [1/7] create_project: src/main.v -> build/blink.prj
-    [2/7] create_xst: build/blink.prj -> build/blink.xst
-    [3/7] run_xst: build/blink.xst -> build/blink.ngc
     …
-    [4/7] ngdbuild: build/blink.ngc -> build/blink.ngd
-    …
-    [5/7] map: build/blink.ngd -> build/blink.ncd
-    …
-    [6/7] places_and_routes: build/blink.ncd -> build/blink-routed.ncd
-    …
-    [7/7] bitgen: build/blink-routed.ncd -> build/blink.bit
-    …
-    Waf: Leaving directory `/home/sanpi/projects/fpga/waf/build'
     'build' finished successfully (21.857s)
 
 Have fun <3
