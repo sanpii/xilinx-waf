@@ -86,7 +86,6 @@ class XilinxProject(object):
         module = "blinkTest"
 
         cmd = "%(tool)s -incremental -lib unisims_ver -lib unimacro_ver -lib xilinxcorelib_ver -o %(target)s -prj %(source)s %(name)s.%(module)s %(name)s.glbl" % locals()
-        print cmd
         self.ctx.exec_command(cmd, cwd=self.path.abspath())
 
         return exe
