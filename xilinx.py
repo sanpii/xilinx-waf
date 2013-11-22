@@ -22,7 +22,15 @@ def xilinx_find_tool(conf, name):
     conf.env["XILINX_DIR"] = conf.options.dir
 
 def configure(conf):
-    for tool in ["xst", "ngdbuild", "map", "par", "bitgen", "fuse", "vlogcomp"]:
+    tools = ["xst", "ngdbuild", "map", "par", "bitgen", "fuse"]
+
+    if conf.options.simtool == "xilinx":
+        tools += ["vlogcomp"]
+    else:
+        conf.env["IVERILOG"] = conf.find_program("iverilog")
+        conf.env["VVP"] = conf.find_program("vvp")
+
+    for tool in tools:
         xilinx_find_tool(conf, tool)
 
 def options(opt):
@@ -32,6 +40,13 @@ def options(opt):
         dest = "dir",
         default = "/opt/Xilinx/14.5/ISE_DS/ISE",
         help = "xilinx ise directory"
+    )
+    opt.add_option(
+        "--simtool",
+        action = "store",
+        dest = "simtool",
+        default = "xilinx",
+        help = "xilinx simulate tool (xilinx or iverilog)"
     )
 
 class XilinxProject(object):
@@ -54,7 +69,12 @@ class XilinxProject(object):
 
 
     def simulate(self):
+        if not self.tg.env.XILINX_VLOGCOMP:
+            self.simulate_iverilog()
+        else:
+            self.simulate_xilinx()
 
+    def simulate_xilinx(self):
         shutil.copy(
             "%s/verilog/src/glbl.v" % self.tg.env.XILINX_DIR,
             "%s/glbl.v" % self.path.abspath()
@@ -90,6 +110,30 @@ class XilinxProject(object):
 
         return exe
 
+    def simulate_iverilog(self):
+        vvp = self.iverelog()
+        self.vvp(vvp)
+
+    def iverelog(self):
+        Logs.info("=> Running iverilog")
+
+        tool = self.tg.env.IVERILOG
+        sources = ''
+        for source in self.sources:
+            sources += " " + source.abspath()
+        project = self.name
+
+        cmd = "%(tool)s -o %(project)s %(sources)s" % locals()
+        self.ctx.exec_command(cmd, cwd=self.path.abspath())
+
+        return project
+
+    def vvp(self, vvp):
+        Logs.info("=> Running vvp")
+
+        tool = self.tg.env.VVP
+        cmd = "%(tool)s -n %(vvp)s" % locals()
+        self.ctx.exec_command(cmd, cwd=self.path.abspath())
 
     def build(self):
         project = self.create_project(self.sources)

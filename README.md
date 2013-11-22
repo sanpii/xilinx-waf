@@ -57,6 +57,12 @@ Simulate:
     $ cd build
     $ ./blink_bench.exe -gui
 
+Or with iverilog:
+
+    $ ./waf configure --simtool=iverilog
+    $ ./waf sim
+    $ gtkwave build/blink_bench.vcd
+
 Synthetize:
 
     $ ./waf
